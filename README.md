@@ -1,66 +1,54 @@
-## Foundry
+# NFT Staking
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+This project is a simple NFT staking contract that allows users to stake their NFTs and earn ERC20 rewards. The Staking Contract is UUPS Upgradeable.
 
-Foundry consists of:
+## Contracts
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+1. **NFTStaking.sol:** This contract is the main staking contract that allows users to stake their NFTs and earn ERC20 rewards. This contract is UUPS upgradeable and uses the StakikngConfiguration contract to get the staking configuration.
 
-## Documentation
+2. **StakingConfiguration.sol:** This contract is used to store the staking configuration. It is used by the NFTStaking contract to get the staking configuration.
 
-https://book.getfoundry.sh/
+## Project Structure
 
-## Usage
-
-### Build
-
-```shell
-$ forge build
+```js
+src/
+└── interfaces/
+    ├── INFTStaking.sol
+    └── IStakingConfiguration.sol
+    |
+    ├── NFTStaking.sol
+    |
+    └── StakingConfiguration.sol
 ```
 
-### Test
+## Build
 
-```shell
-$ forge test
+```bash
+git clone https://github.com/Ericselvig/NFTStaking.git
+cd NFTStaking
+make build
 ```
 
-### Format
+## Deploy
 
-```shell
-$ forge fmt
+```bash
+make deploy-sepolia
 ```
 
-### Gas Snapshots
+**Note:** Before running the deploy command, make sure to set the variables in the `.env` file.
+An `.env.example` file is provided for reference.
 
-```shell
-$ forge snapshot
+## Test
+
+```bash
+forge test
 ```
 
-### Anvil
+## Testnet Deployments
 
-```shell
-$ anvil
-```
+These contracts have been deployed on Ethereum Sepolia and verified on Etherscan.
 
-### Deploy
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+| Contract             | Address                                    |
+| -------------------- | ------------------------------------------ |
+| NFTStaking (Proxy)   | 0xf72aEc482bB477110D6cD628c6AAA9AfefB9b9de |
+| StakingConfiguration | 0x087c16038Ab34d3B25277337BF8D28a9a18060Da |
