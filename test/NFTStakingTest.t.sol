@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {Test} from "forge-std/Test.sol";
+import {Test, console} from "forge-std/Test.sol";
 import {StakingConfiguration} from "../src/StakingConfiguration.sol";
 import {NFTStaking} from "../src/NFTStaking.sol";
 import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
@@ -34,6 +34,8 @@ contract NFTStakingTest is Test {
             address(staking),
             abi.encodeWithSelector(staking.initialize.selector, address(config))
         );
+
+        config.setStakingContract(address(proxy));
 
         alice = makeAddr("alice");
         bob = makeAddr("bob");
@@ -177,11 +179,12 @@ contract NFTStakingTest is Test {
             ,
             ,
             ,
+            ,
             uint256 unstakedAt,
             uint256 unstakeTimestamp
         ) = abi.decode(
                 data,
-                (address, uint256, uint256, uint256, uint256, uint256)
+                (address, uint256, uint256, uint256, uint256, uint256, uint256)
             );
         assertEq(owner, address(alice));
         assertEq(unstakedAt, block.number);
@@ -330,12 +333,14 @@ contract NFTStakingTest is Test {
         (bool ok, ) = address(proxy).call(
             abi.encodeWithSelector(staking.unstake.selector, tokenIds)
         );
+        require(ok);
 
         vm.roll(block.number + 10);
 
         (ok, ) = address(proxy).call(
             abi.encodeWithSelector(staking.claimRewards.selector, 1)
         );
+        require(ok);
 
         assertEq(rewardToken.balanceOf(bob), 10 * config.getRewardPerBlock());
     }
@@ -352,5 +357,58 @@ contract NFTStakingTest is Test {
         );
         uint256 pending = abi.decode(data, (uint256));
         assertEq(pending, 10 * config.getRewardPerBlock());
+    }
+
+    function testRewardsAreDistributedCorrectly() external {
+        config.setRewardPerBlock(10e18);
+        _mintAndStake(bob, 1);
+        // 1 hour = 1 block
+        vm.roll(block.number + (29 * 24));
+        vm.warp(block.timestamp + 29 days);
+        _mintAndStake(alice, 2);
+        vm.roll(block.number + (30 * 24));
+        vm.warp(block.timestamp + 30 days);
+        config.setRewardPerBlock(20e18);
+        vm.roll(block.number + (60 * 24));
+        vm.warp(block.timestamp + 60 days);
+
+        (bool ok, bytes memory data) = address(proxy).call(
+            abi.encodeWithSelector(staking.getPendingRewards.selector, 1)
+        );
+        require(ok);
+        uint256 userArewards = abi.decode(data, (uint256));
+        assertEq(userArewards, (240 * 59 + 480 * 60) * 1e18);
+        console.log(userArewards);
+        (ok, data) = address(proxy).call(
+            abi.encodeWithSelector(staking.getPendingRewards.selector, 2)
+        );
+        require(ok);
+        uint256 userBrewards = abi.decode(data, (uint256));
+        assertEq(userBrewards, (240 * 30 + 480 * 60) * 1e18);
+        console.log(userBrewards);
+
+        vm.roll(block.number + (60 * 24));
+        vm.warp(block.timestamp + 60 days);
+
+        config.setRewardPerBlock(30e18);
+
+        vm.roll(block.number + (180 * 24));
+        vm.warp(block.timestamp + 180 days);
+
+        (ok, data) = address(proxy).call(
+            abi.encodeWithSelector(staking.getPendingRewards.selector, 1)
+        );
+        require(ok);
+        userArewards = abi.decode(data, (uint256));
+        assertEq(userArewards, (240 * 59 + 480 * 60 + 480 * 60 + 720 * 180) * 1e18);
+        console.log(userArewards);
+        (ok, data) = address(proxy).call(
+            abi.encodeWithSelector(staking.getPendingRewards.selector, 2)
+        );
+        require(ok);
+        userBrewards = abi.decode(data, (uint256));
+        assertEq(userBrewards, (240 * 30 + 480 * 60 + 480 * 60 + 720 * 180) * 1e18);
+        console.log(userBrewards);
+
     }
 }

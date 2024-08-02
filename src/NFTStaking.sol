@@ -24,6 +24,8 @@ contract NFTStaking is
 {
     IStakingConfiguration internal _config;
     mapping(uint256 tokenId => StakingPosition) internal _positions;
+    mapping(uint256 stakingId => uint256 tokenId) internal _tokenIds;
+    uint256 internal _totalPositions;
 
     /**
      * @dev modifier to check if the caller is the owner of the position
@@ -33,6 +35,11 @@ contract NFTStaking is
         if (positionOwner != _msgSender()) {
             revert NFTStaking__NotPositionOwner();
         }
+        _;
+    }
+
+    modifier updateRewards(uint256 _tokenId) {
+        _updateRewards(_tokenId);
         _;
     }
 
@@ -46,24 +53,24 @@ contract NFTStaking is
      * @inheritdoc INFTStaking
      */
     function stake(
-        uint256[] calldata _tokenIds
+        uint256[] calldata tokenIds
     ) external override whenNotPaused {
-        for (uint i; i < _tokenIds.length; ++i) {
-            _stake(_tokenIds[i]);
+        for (uint i; i < tokenIds.length; ++i) {
+            _stake(tokenIds[i]);
         }
-        emit Staked(_msgSender(), _tokenIds);
+        emit Staked(_msgSender(), tokenIds);
     }
 
     /**
      * @inheritdoc INFTStaking
      */
     function unstake(
-        uint256[] calldata _tokenIds
+        uint256[] calldata tokenIds
     ) external override whenNotPaused {
-        for (uint i; i < _tokenIds.length; ++i) {
-            _unstake(_tokenIds[i]);
+        for (uint i; i < tokenIds.length; ++i) {
+            _unstake(tokenIds[i]);
         }
-        emit Unstaked(_msgSender(), _tokenIds);
+        emit Unstaked(_msgSender(), tokenIds);
     }
 
     /**
@@ -71,7 +78,13 @@ contract NFTStaking is
      */
     function withdraw(
         uint256 _tokenId
-    ) external override whenNotPaused onlyPositionOwner(_tokenId) {
+    )
+        external
+        override
+        updateRewards(_tokenId)
+        whenNotPaused
+        onlyPositionOwner(_tokenId)
+    {
         StakingPosition memory position = _positions[_tokenId];
         if (
             position.unstakeTimestamp + _config.getUnbondingPeriod() >
@@ -79,7 +92,13 @@ contract NFTStaking is
         ) {
             revert NFTStaking__UnbondingPeriod();
         }
+        IERC20(_config.getRewardToken()).transfer(
+            _msgSender(),
+            position.accruedRewards
+        );
+
         delete _positions[_tokenId];
+
         IERC721(_config.getStakingNFT()).safeTransferFrom(
             address(this),
             _msgSender(),
@@ -93,27 +112,45 @@ contract NFTStaking is
      */
     function claimRewards(
         uint256 _tokenId
-    ) external override whenNotPaused onlyPositionOwner(_tokenId) {
+    )
+        external
+        override
+        whenNotPaused
+        updateRewards(_tokenId)
+        onlyPositionOwner(_tokenId)
+    {
         StakingPosition memory position = _positions[_tokenId];
         if (
             position.lastClaimedAt + _config.getDelayPeriod() > block.timestamp
         ) {
             revert NFTStaking__DelayPeriod();
         }
-        uint256 pending = getPendingRewards(_tokenId);
+        uint256 pending = position.accruedRewards;
+        position.accruedRewards = 0;
+        position.lastClaimedAt = block.number;
+        position.lastClaimedTimestamp = block.timestamp;
 
-        position.lastClaimedAt = block.timestamp;
-        _positions[_tokenId].claimedRewards += pending;
+        _positions[_tokenId] = position;
 
         IERC20(_config.getRewardToken()).transfer(_msgSender(), pending);
 
         emit RewardsClaimed(msg.sender, pending);
     }
 
+    function updateAllPositionRewards() external {
+        for (uint i; i < _totalPositions; ++i) {
+            if (_positions[_tokenIds[i]].unstakedAt == 0) {
+                _updateRewards(_tokenIds[i]);
+            }
+        }
+    }
+
     /**
      * @dev internal function to stake an NFT
      */
     function _stake(uint256 _tokenId) internal {
+        _tokenIds[_totalPositions++] = _tokenId;
+
         IERC721(_config.getStakingNFT()).safeTransferFrom(
             _msgSender(),
             address(this),
@@ -122,20 +159,36 @@ contract NFTStaking is
         _positions[_tokenId] = StakingPosition({
             owner: _msgSender(),
             stakedAt: block.number,
-            lastClaimedAt: block.timestamp,
-            claimedRewards: 0,
+            lastClaimedAt: block.number,
+            lastClaimedTimestamp: block.timestamp,
+            accruedRewards: 0,
             unstakedAt: 0,
-            unstakeTimestamp: 0
+            unstakeTimestamp: 0,
+            lastUpdatedAt: block.number
         });
     }
 
     /**
      * @dev internal function to unstake an NFT
      */
-    function _unstake(uint256 _tokenId) internal onlyPositionOwner(_tokenId) {
+    function _unstake(
+        uint256 _tokenId
+    ) internal updateRewards(_tokenId) onlyPositionOwner(_tokenId) {
         StakingPosition memory position = _positions[_tokenId];
         position.unstakedAt = block.number;
         position.unstakeTimestamp = block.timestamp;
+        _positions[_tokenId] = position;
+    }
+
+    function _updateRewards(uint256 _tokenId) internal {
+        StakingPosition memory position = _positions[_tokenId];
+        uint256 finalBlock = position.unstakedAt == 0
+            ? block.number
+            : position.unstakedAt;
+        uint256 pending = (finalBlock - position.lastUpdatedAt) *
+            _config.getRewardPerBlock();
+        position.accruedRewards += pending;
+        position.lastUpdatedAt = finalBlock;
         _positions[_tokenId] = position;
     }
 
@@ -144,15 +197,8 @@ contract NFTStaking is
      */
     function getPendingRewards(
         uint256 _tokenId
-    ) public view override returns (uint256) {
-        StakingPosition memory position = _positions[_tokenId];
-        uint256 finalBlock = position.unstakedAt == 0
-            ? block.number
-            : position.unstakedAt;
-        uint256 pending = (finalBlock - position.stakedAt) *
-            _config.getRewardPerBlock() -
-            position.claimedRewards;
-        return pending;
+    ) public override updateRewards(_tokenId) returns (uint256) {
+        return _positions[_tokenId].accruedRewards;
     }
 
     /**
@@ -160,7 +206,12 @@ contract NFTStaking is
      */
     function getStakingPosition(
         uint256 _tokenId
-    ) external view override returns (StakingPosition memory) {
+    )
+        external
+        override
+        updateRewards(_tokenId)
+        returns (StakingPosition memory)
+    {
         return _positions[_tokenId];
     }
 

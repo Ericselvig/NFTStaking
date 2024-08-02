@@ -11,6 +11,7 @@ interface IStakingConfiguration {
     function setRewardPerBlock(uint256 rewardPerBlock) external;
     function setDelayPeriod(uint256 delayPeriod) external;
     function setUnbondingPeriod(uint256 unbondingPeriod) external;
+    function setStakingContract(address nftStaking) external;
 
     ///////////////
     /// GETTERS ///

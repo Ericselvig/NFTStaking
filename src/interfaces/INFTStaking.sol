@@ -26,10 +26,12 @@ interface INFTStaking {
     struct StakingPosition {
         address owner; // owner of the position
         uint256 stakedAt; // block number on which the nft was staked at
-        uint256 lastClaimedAt; // the timestamp where rewards were last claimed
-        uint256 claimedRewards; // total claimed rewards
+        uint256 lastClaimedAt; // block number at which rewards were last claimed
+        uint256 lastClaimedTimestamp; // timestamp at which rewards were last claimed
+        uint256 accruedRewards; // accrued rewards
         uint256 unstakedAt; // block number on which the nft was unstaked at
         uint256 unstakeTimestamp; // timestamp at which the nft was unstaked
+        uint256 lastUpdatedAt; // block number at which the position was last updated
     }
 
     /**
@@ -68,7 +70,7 @@ interface INFTStaking {
      */
     function getPendingRewards(
         uint256 _tokenId
-    ) external view returns (uint256);
+    ) external returns (uint256);
 
 
     /**
@@ -78,5 +80,7 @@ interface INFTStaking {
      */
     function getStakingPosition(
         uint256 _tokenId
-    ) external view returns (StakingPosition memory);
+    ) external returns (StakingPosition memory);
+
+    function updateAllPositionRewards() external;
 }

@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {IStakingConfiguration} from "./interfaces/IStakingConfiguration.sol";
+import {INFTStaking} from "./interfaces/INFTStaking.sol";
 
 /**
  * @title StakingConfiguration
@@ -12,6 +13,7 @@ import {IStakingConfiguration} from "./interfaces/IStakingConfiguration.sol";
 contract StakingConfiguration is IStakingConfiguration, Ownable2Step {
     address internal _rewardToken;
     address internal _stakingNFT;
+    INFTStaking internal _nftStaking;
     uint256 internal _rewardPerBlock;
     uint256 internal _unbondingPeriod;
     uint256 internal _delayPeriod;
@@ -34,6 +36,9 @@ contract StakingConfiguration is IStakingConfiguration, Ownable2Step {
 
     /// @notice Set the reward per block
     function setRewardPerBlock(uint256 rewardPerBlock) external onlyOwner {
+        if (_rewardPerBlock != 0) {
+            _nftStaking.updateAllPositionRewards();
+        }
         _rewardPerBlock = rewardPerBlock;
     }
 
@@ -45,6 +50,10 @@ contract StakingConfiguration is IStakingConfiguration, Ownable2Step {
     /// @notice Set the delay period
     function setDelayPeriod(uint256 delayPeriod) external onlyOwner {
         _delayPeriod = delayPeriod;
+    }
+
+    function setStakingContract(address nftStaking) external onlyOwner {
+        _nftStaking = INFTStaking(nftStaking);
     }
 
     ///////////////////////////////
